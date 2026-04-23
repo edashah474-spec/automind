@@ -16,5 +16,15 @@ class Memory(Base):
     content = Column(Text)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+class ExtractedFact(Base):
+    __tablename__ = "extracted_facts"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, default="default_user")
+    category = Column(String)  # personal, goals, skills, preferences
+    fact = Column(Text)
+    confidence = Column(String, default="high")
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
 def create_tables():
     Base.metadata.create_all(bind=engine)
