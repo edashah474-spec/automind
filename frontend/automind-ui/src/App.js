@@ -243,9 +243,9 @@ export default function App() {
               </div>
               <div className="chips-row">
                 {[
-                  "My name is Safa, I study AI Engineering",
-                  "I am building a project called AutoMind",
-                  "What do you remember about me?"
+                  "Let me introduce myself...",
+                  "What can you help me with?",
+                  "Do you remember anything about me?"
                 ].map((s, i) => (
                   <button key={i} className="chip-btn" onClick={() => setInput(s)}>{s}</button>
                 ))}

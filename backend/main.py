@@ -160,7 +160,7 @@ def root():
 async def chat(request: ChatRequest):
     session_id = request.session_id
     user_message = request.message
-    user_id = "default_user"
+    user_id = session_id
 
     # Retrieve relevant facts semantically
     memory_data = retrieve_relevant_facts(user_message, user_id)
