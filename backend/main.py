@@ -18,10 +18,10 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 chroma_client = chromadb.PersistentClient(path="../data/chroma")
 collection = chroma_client.get_or_create_collection(name="automind_memories_v2")
 
