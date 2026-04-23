@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./App.css";
 
-const API = "http://127.0.0.1:8000";
+const API = "https://automind-5ygz.onrender.com";
 
 export default function App() {
   const [messages, setMessages] = useState([]);
