@@ -152,9 +152,18 @@ def retrieve_relevant_facts(query: str, user_id: str = "default_user") -> dict:
 
 # --- ROUTES --- #
 
-@app.get("/")
-def root():
-    return {"message": "AutoMind is running!"}
+@app.get("/reset-all")
+def reset_all():
+    db = SessionLocal()
+    db.query(Memory).execute("DELETE FROM memories")
+    db.commit()
+    db.close()
+    try:
+        chroma_client.delete_collection("automind_memories_v2")
+        chroma_client.get_or_create_collection("automind_memories_v2")
+    except:
+        pass
+    return {"message": "All memory wiped"}
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
