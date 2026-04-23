@@ -1,36 +1,87 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import "./App.css";
 
-const API = "https://automind-5ygz.onrender.com";
+const API = "http://127.0.0.1:8000";
 
 export default function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sessionId] = useState("user_" + Date.now());
+  const [sessions, setSessions] = useState([{ id: "session_1", name: "Main Chat" }]);
+  const [currentSessionId, setCurrentSessionId] = useState("session_1");
   const [memoriesUsed, setMemoriesUsed] = useState(0);
+  const [msgCount, setMsgCount] = useState(0);
   const bottomRef = useRef(null);
+
+  // Memories panel
+  const [showMemories, setShowMemories] = useState(false);
+  const [allMemories, setAllMemories] = useState([]);
+
+  // New chat modal
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [newChatName, setNewChatName] = useState("");
+  const nameInputRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (showNameModal) {
+      setTimeout(() => nameInputRef.current?.focus(), 60);
+    }
+  }, [showNameModal]);
+
+  const createNewChat = () => {
+    const name = newChatName.trim();
+    if (!name) return;
+    const newId = "session_" + Date.now();
+    setSessions(prev => [...prev, { id: newId, name }]);
+    setCurrentSessionId(newId);
+    setMessages([]);
+    setMemoriesUsed(0);
+    setMsgCount(0);
+    setNewChatName("");
+    setShowNameModal(false);
+  };
+
+  const handleModalKey = (e) => {
+    if (e.key === "Enter") createNewChat();
+    if (e.key === "Escape") { setShowNameModal(false); setNewChatName(""); }
+  };
+
+  const switchSession = (id) => {
+    setCurrentSessionId(id);
+    setMessages([]);
+    setMemoriesUsed(0);
+    setMsgCount(0);
+  };
 
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
     const userMsg = input.trim();
     setInput("");
     setMessages(prev => [...prev, { role: "user", content: userMsg }]);
+    setMsgCount(prev => prev + 1);
     setLoading(true);
-
     try {
       const res = await axios.post(`${API}/chat`, {
-        session_id: sessionId,
+        session_id: currentSessionId,
         message: userMsg
       });
-      setMemoriesUsed(res.data.memories_used);
-      setMessages(prev => [...prev, { role: "assistant", content: res.data.response }]);
+      setMemoriesUsed(res.data.memories_used || 0);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: res.data.response,
+        memoriesUsed: res.data.memories_used || 0
+      }]);
     } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Make sure the backend is running!" }]);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: "Connection error. Make sure the backend is running.",
+        memoriesUsed: 0
+      }]);
     }
     setLoading(false);
   };
@@ -40,128 +91,221 @@ export default function App() {
   };
 
   const clearMemory = async () => {
-    await axios.delete(`${API}/memories/${sessionId}`);
+    if (!window.confirm("Clear all memory for this session?")) return;
+    await axios.delete(`${API}/memories/${currentSessionId}`);
     setMessages([]);
     setMemoriesUsed(0);
+    setMsgCount(0);
   };
 
+  const viewMemories = async () => {
+    try {
+      const res = await axios.get(`${API}/memories/${currentSessionId}`);
+      setAllMemories(res.data);
+      setShowMemories(true);
+    } catch {
+      alert("Could not load memories");
+    }
+  };
+
+  const currentSession = sessions.find(s => s.id === currentSessionId);
+
   return (
-    <div style={{ display: "flex", height: "100vh", fontFamily: "'Segoe UI', sans-serif", background: "#0f172a" }}>
-      
-      {/* SIDEBAR */}
-      <div style={{ width: 260, background: "#1e293b", padding: 24, display: "flex", flexDirection: "column", borderRight: "1px solid #334155" }}>
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 24, fontWeight: "bold", color: "#38bdf8" }}>🧠 AutoMind</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>AI with Persistent Memory</div>
-        </div>
+    <div className="shell">
 
-        <div style={{ background: "#0f172a", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Session Info</div>
-          <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>
-            <span style={{ color: "#38bdf8" }}>●</span> Active Session
-          </div>
-          <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>
-            💬 {messages.filter(m => m.role === "user").length} messages sent
-          </div>
-          <div style={{ fontSize: 12, color: "#94a3b8" }}>
-            🧠 {memoriesUsed} memories retrieved
-          </div>
-        </div>
-
-        <div style={{ background: "#0f172a", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>How it works</div>
-          <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>
-            AutoMind remembers everything you tell it — across all conversations. It uses vector search to retrieve relevant memories and give personalised responses.
+      {/* ── NEW CHAT MODAL ── */}
+      {showNameModal && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowNameModal(false); setNewChatName(""); } }}>
+          <div className="modal-box">
+            <div className="modal-title">Name this conversation</div>
+            <div className="modal-sub">Give it a short topic so you can find it later in your sessions.</div>
+            <input
+              ref={nameInputRef}
+              className="modal-input"
+              value={newChatName}
+              onChange={e => setNewChatName(e.target.value)}
+              onKeyDown={handleModalKey}
+              placeholder="e.g. London job search, AutoMind ideas..."
+            />
+            <div className="modal-btns">
+              <button className="modal-cancel" onClick={() => { setShowNameModal(false); setNewChatName(""); }}>
+                Cancel
+              </button>
+              <button className="modal-create" onClick={createNewChat} disabled={!newChatName.trim()}>
+                Create chat
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        <div style={{ flex: 1 }} />
+      {/* ── MEMORIES PANEL ── */}
+      {showMemories && (
+        <div className="memories-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowMemories(false); }}>
+          <div className="memories-panel">
+            <div className="memories-header">
+              <div className="memories-title">Memory bank — {currentSession?.name}</div>
+              <button className="close-btn" onClick={() => setShowMemories(false)}>×</button>
+            </div>
+            <div className="memories-list">
+              {allMemories.length === 0
+                ? <div className="no-memories">no memories stored yet</div>
+                : allMemories.map((m, i) => (
+                  <div key={i} className="memory-item">
+                    <div className={`memory-role ${m.role}`}>{m.role}</div>
+                    <div className="memory-content">{m.content}</div>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+      )}
 
-        <button onClick={clearMemory} style={{ background: "#dc2626", color: "white", border: "none", padding: "10px 16px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: "bold" }}>
-          🗑️ Clear Memory
+      {/* ── SIDEBAR ── */}
+      <div className="sidebar">
+        <div className="logo-wrap">
+          <div className="logo-mark">🧠</div>
+          <div className="logo-text-block">
+            <div className="logo-name">AutoMind</div>
+            <div className="logo-tagline">persistent memory ai</div>
+          </div>
+        </div>
+
+        <button className="new-chat-btn" onClick={() => setShowNameModal(true)}>
+          <span>+</span> New conversation
+        </button>
+
+        <div className="section-label">Sessions</div>
+        <div className="session-list">
+          {sessions.map(session => (
+            <div
+              key={session.id}
+              className={`session-item ${currentSessionId === session.id ? "active" : ""}`}
+              onClick={() => switchSession(session.id)}
+            >
+              <div className="session-name">{session.name}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="section-label">Live stats</div>
+        <div className="memory-stats">
+          <div className="stat-row">
+            <div className="stat-dot" style={{ background: "#7c6fcd" }}></div>
+            <div className="stat-label">active session</div>
+            <div className="stat-val" style={{ color: "#7c6fcd" }}>●</div>
+          </div>
+          <div className="stat-row">
+            <div className="stat-dot" style={{ background: "#4ecdc4" }}></div>
+            <div className="stat-label">memories used</div>
+            <div className="stat-val">{memoriesUsed}</div>
+          </div>
+          <div className="stat-row">
+            <div className="stat-dot" style={{ background: "#f6c90e" }}></div>
+            <div className="stat-label">messages sent</div>
+            <div className="stat-val">{msgCount}</div>
+          </div>
+        </div>
+
+        <button className="sidebar-btn" onClick={viewMemories}>
+          <span>👁</span> View memory bank
+        </button>
+        <button className="sidebar-btn danger" onClick={clearMemory}>
+          <span>🗑</span> Clear memory
         </button>
       </div>
 
-      {/* MAIN CHAT */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        
-        {/* HEADER */}
-        <div style={{ padding: "16px 24px", borderBottom: "1px solid #1e293b", background: "#0f172a", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #38bdf8, #6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🧠</div>
-          <div>
-            <div style={{ fontWeight: "bold", color: "#f1f5f9", fontSize: 15 }}>AutoMind</div>
-            <div style={{ fontSize: 12, color: "#22c55e" }}>● Online — Memory Active</div>
+      {/* ── MAIN CHAT ── */}
+      <div className="main">
+
+        {/* TOPBAR */}
+        <div className="topbar">
+          <div className="topbar-avatar">🧠</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="topbar-name">{currentSession?.name || "AutoMind"}</div>
+            <div className="topbar-status">
+              <div className="live-dot"></div>
+              online — memory active
+            </div>
           </div>
         </div>
 
         {/* MESSAGES */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "24px", display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="messages-area">
           {messages.length === 0 && (
-            <div style={{ textAlign: "center", marginTop: 80 }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>🧠</div>
-              <div style={{ fontSize: 20, fontWeight: "bold", color: "#f1f5f9", marginBottom: 8 }}>Welcome to AutoMind</div>
-              <div style={{ fontSize: 14, color: "#64748b", maxWidth: 400, margin: "0 auto", lineHeight: 1.6 }}>
-                I remember everything you tell me across all conversations. Tell me about yourself, your projects, your goals — I will never forget.
+            <div className="empty-state">
+              <div className="empty-glyph">🧠</div>
+              <div className="empty-title">Welcome to AutoMind</div>
+              <div className="empty-sub">
+                I remember everything you tell me across all conversations.
+                Tell me about yourself — I will never forget.
               </div>
-              <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24, flexWrap: "wrap" }}>
-                {["My name is Safa and I study AI Engineering", "I am building a project called AutoMind", "What do you remember about me?"].map((s, i) => (
-                  <button key={i} onClick={() => setInput(s)} style={{ background: "#1e293b", color: "#94a3b8", border: "1px solid #334155", padding: "8px 16px", borderRadius: 20, cursor: "pointer", fontSize: 13 }}>{s}</button>
+              <div className="chips-row">
+                {[
+                  "My name is Safa, I study AI Engineering",
+                  "I am building a project called AutoMind",
+                  "What do you remember about me?"
+                ].map((s, i) => (
+                  <button key={i} className="chip-btn" onClick={() => setInput(s)}>{s}</button>
                 ))}
               </div>
             </div>
           )}
 
           {messages.map((msg, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", gap: 10, alignItems: "flex-start" }}>
-              {msg.role === "assistant" && (
-                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #38bdf8, #6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>🧠</div>
-              )}
-              <div style={{
-                maxWidth: "70%", padding: "12px 16px", borderRadius: msg.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-                background: msg.role === "user" ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "#1e293b",
-                color: "#f1f5f9", fontSize: 14, lineHeight: 1.6
-              }}>
-                {msg.content}
+            <div key={i} className={`msg-row ${msg.role === "user" ? "user" : ""}`}>
+              <div className={`msg-avatar ${msg.role === "user" ? "user-av" : "ai"}`}>
+                {msg.role === "user" ? "S" : "🧠"}
               </div>
-              {msg.role === "user" && (
-                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#334155", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>👤</div>
-              )}
+              <div className="bubble-wrap">
+                <div className={`bubble ${msg.role === "user" ? "user" : "ai"}`}>
+                  {msg.content}
+                </div>
+                {msg.role === "assistant" && msg.memoriesUsed > 0 && (
+                  <div className="mem-badge">
+                    ◈ {msg.memoriesUsed} memories retrieved
+                  </div>
+                )}
+              </div>
             </div>
           ))}
 
           {loading && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #38bdf8, #6366f1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🧠</div>
-              <div style={{ background: "#1e293b", padding: "12px 16px", borderRadius: "18px 18px 18px 4px", color: "#64748b", fontSize: 14 }}>
-                Thinking and searching memories...
+            <div className="thinking-wrap">
+              <div className="msg-avatar ai">🧠</div>
+              <div className="thinking-bubble">
+                <div className="think-dot"></div>
+                <div className="think-dot"></div>
+                <div className="think-dot"></div>
+                <span className="thinking-label">searching memories...</span>
               </div>
             </div>
           )}
+
           <div ref={bottomRef} />
         </div>
 
         {/* INPUT */}
-        <div style={{ padding: "16px 24px", borderTop: "1px solid #1e293b", background: "#0f172a" }}>
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+        <div className="input-area">
+          <div className="input-row">
             <textarea
+              className="input-box"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
               placeholder="Tell me anything — I will remember it forever..."
               rows={1}
-              style={{
-                flex: 1, background: "#1e293b", border: "1px solid #334155", borderRadius: 12,
-                color: "#f1f5f9", padding: "12px 16px", fontSize: 14, resize: "none",
-                outline: "none", fontFamily: "inherit", lineHeight: 1.5
-              }}
             />
-            <button onClick={sendMessage} disabled={loading || !input.trim()} style={{
-              background: loading || !input.trim() ? "#334155" : "linear-gradient(135deg, #3b82f6, #6366f1)",
-              color: "white", border: "none", padding: "12px 20px", borderRadius: 12,
-              cursor: loading || !input.trim() ? "not-allowed" : "pointer", fontSize: 18
-            }}>➤</button>
+            <button
+              className="send-btn"
+              onClick={sendMessage}
+              disabled={loading || !input.trim()}
+            >
+              ➤
+            </button>
           </div>
-          <div style={{ fontSize: 11, color: "#334155", marginTop: 8, textAlign: "center" }}>Press Enter to send • Shift+Enter for new line</div>
+          <div className="input-hint">enter to send · shift+enter for new line</div>
         </div>
       </div>
     </div>
